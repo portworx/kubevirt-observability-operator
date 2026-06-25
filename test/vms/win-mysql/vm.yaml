@@ -1,0 +1,172 @@
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  name: win-mssql-vm
+  labels:
+    app: win-mssql-vm
+    kubevirt.io/os: window
+  annotations:
+    pvc.source: "cloned"
+spec:
+  dataVolumeTemplates:
+    - metadata:
+        name: win-boot-template
+        annotations:
+          cdi.kubevirt.io/cloneType: csi-clone
+      spec:
+        source:
+          pvc:
+            name: win-mssql-boot-pxe-raw-template-winrm 
+            namespace: openshift-virtualization-os-images
+        pvc:
+          accessModes:
+            - ReadWriteMany
+          resources:
+            requests:
+              storage: 100Gi
+          storageClassName: raw-vol-sc-wffc
+          volumeMode: Block
+    - metadata:
+        name: win-data-vol-tempate-1
+        annotations:
+          cdi.kubevirt.io/cloneType: csi-clone
+      spec:
+        source:
+          pvc:
+            name: win-mssql-data-pxe-raw-template-latest0
+            namespace: openshift-virtualization-os-images
+        pvc:
+          accessModes:
+            - ReadWriteMany
+          resources:
+            requests:
+              storage: 100Gi
+          storageClassName: raw-vol-sc-wffc
+          volumeMode: Block
+
+    - metadata:
+        name: win-data-vol-clone-1
+        annotations:
+          cdi.kubevirt.io/cloneType: csi-clone
+      spec:
+        source:
+          pvc:
+            name: win-mssql-data-pxe-raw-template-latest0
+            namespace: openshift-virtualization-os-images
+        pvc:
+          accessModes:
+            - ReadWriteMany
+          resources:
+            requests:
+              storage: 100Gi
+          storageClassName: raw-vol-sc-wffc
+          volumeMode: Block
+
+    - metadata:
+        name: win-data-vol-clone-2
+        annotations:
+          cdi.kubevirt.io/cloneType: csi-clone
+      spec:
+        source:
+          pvc:
+            name: win-mssql-data-pxe-raw-template-latest0
+            namespace: openshift-virtualization-os-images
+        pvc:
+          accessModes:
+            - ReadWriteMany
+          resources:
+            requests:
+              storage: 100Gi
+          storageClassName: raw-vol-sc-wffc
+          volumeMode: Block
+
+    - metadata:
+        name: win-data-vol-clone-3
+        annotations:
+          cdi.kubevirt.io/cloneType: csi-clone
+      spec:
+        source:
+          pvc:
+            name: win-mssql-data-pxe-raw-template-latest0
+            namespace: openshift-virtualization-os-images
+        pvc:
+          accessModes:
+            - ReadWriteMany
+          resources:
+            requests:
+              storage: 100Gi
+          storageClassName: raw-vol-sc-wffc
+          volumeMode: Block
+  running: true
+  template:
+    metadata:
+      labels:
+        kubevirt.io/size: medium
+    spec:
+      domain:
+        cpu:
+          cores: 4
+          sockets: 1
+          threads: 1
+        devices:
+          disks:
+            - name: win-boot-disk
+              bootOrder: 1
+              disk:
+                bus: virtio
+            - name: win-dv-data-disk-1
+              disk:
+                bus: virtio
+            - name: cloud-initdisk
+              cdrom:
+                bus: sata
+                readonly: true
+            - name: win-dv-clone-disk-1
+              disk:
+                bus: virtio
+            - name: win-dv-clone-disk-2
+              disk:
+                bus: virtio
+            - name: win-dv-clone-disk-3
+              disk:
+                bus: virtio
+
+          interfaces:
+            - masquerade: {}
+              name: default
+        machine:
+          type: q35
+        resources:
+          requests:
+            memory: 4Gi
+            cpu: 1
+          limits:
+            cpu: 4
+      evictionStrategy: LiveMigrate
+      networks:
+        - name: default
+          pod: {}
+      terminationGracePeriodSeconds: 3600
+      volumes:
+        - name: win-boot-disk
+          dataVolume:
+            name: win-boot-template
+        - name: win-dv-data-disk-1
+          dataVolume:
+            name: win-data-vol-tempate-1
+        - name: cloud-initdisk
+          cloudInitNoCloud:
+            userData: |
+              #cloud-config
+              runcmd:
+                - powershell.exe -Command |
+                    Start-Job -FilePath C:\Users\Administrator\Desktop\mysql_data.ps1
+        - name: win-dv-clone-disk-1
+          dataVolume:
+            name: win-data-vol-clone-1
+        - name: win-dv-clone-disk-2
+          dataVolume:
+            name: win-data-vol-clone-2
+        - name: win-dv-clone-disk-3
+          dataVolume:
+            name: win-data-vol-clone-3

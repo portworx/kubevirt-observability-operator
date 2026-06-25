@@ -1,0 +1,246 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: vm-metrics-alerts
+  namespace: kubevirt-observability-system
+  labels:
+    app: kubevirt-observability
+    openshift.io/prometheus-rule-evaluation-scope: leaf-prometheus
+spec:
+  groups:
+    - name: vm.metrics.alerts
+      rules:
+        - alert: VMExporterDown
+          expr: up{exporter=~"windows_exporter|node_exporter"} == 0
+          for: 5m
+          labels:
+            severity: critical
+          annotations:
+            summary: "VM exporter down"
+            description: "Exporter is down for VM {{ $labels.vm_name }} in namespace {{ $labels.namespace }}."
+
+        - alert: WindowsVMHighCPU
+          expr: 100 - (avg by (namespace, vm_name) (rate(windows_cpu_time_total{mode="idle"}[5m])) * 100) > 85
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Windows VM high CPU"
+            description: "Windows VM {{ $labels.vm_name }} CPU usage is above 85%."
+
+        - alert: LinuxVMHighCPU
+          expr: 100 - (avg by (namespace, vm_name) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 85
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Linux VM high CPU"
+            description: "Linux VM {{ $labels.vm_name }} CPU usage is above 85%."
+
+        - alert: WindowsVMHighMemory
+          expr: 100 * (1 - (windows_os_physical_memory_free_bytes / windows_cs_physical_memory_bytes)) > 85
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Windows VM high memory"
+            description: "Windows VM {{ $labels.vm_name }} memory usage is above 85%."
+
+        - alert: LinuxVMHighMemory
+          expr: 100 * (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) > 85
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Linux VM high memory"
+            description: "Linux VM {{ $labels.vm_name }} memory usage is above 85%."
+
+        - alert: WindowsVMDiskSpaceLow
+          expr: 100 * (windows_logical_disk_free_bytes{volume!~"_Total"} / windows_logical_disk_size_bytes{volume!~"_Total"}) < 15
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Windows VM disk space low"
+            description: "Windows VM {{ $labels.vm_name }} volume {{ $labels.volume }} has less than 15% free space."
+
+        - alert: LinuxVMDiskSpaceLow
+          expr: 100 * (node_filesystem_avail_bytes{fstype!~"tmpfs|overlay|squashfs"} / node_filesystem_size_bytes{fstype!~"tmpfs|overlay|squashfs"}) < 15
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Linux VM disk space low"
+            description: "Linux VM {{ $labels.vm_name }} mount {{ $labels.mountpoint }} has less than 15% free space."
+
+        - alert: WindowsVMDiskLatencyHigh
+          expr: |
+            (
+              rate(windows_logical_disk_read_seconds_total{volume!~"_Total"}[5m])
+              /
+              clamp_min(rate(windows_logical_disk_reads_total{volume!~"_Total"}[5m]), 1)
+            ) > 0.05
+            or
+            (
+              rate(windows_logical_disk_write_seconds_total{volume!~"_Total"}[5m])
+              /
+              clamp_min(rate(windows_logical_disk_writes_total{volume!~"_Total"}[5m]), 1)
+            ) > 0.05
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Windows VM disk latency high"
+            description: "Windows VM {{ $labels.vm_name }} volume {{ $labels.volume }} has disk latency above 50ms."
+
+        - alert: LinuxVMDiskLatencyHigh
+          expr: |
+            (
+              rate(node_disk_read_time_seconds_total{device!~"loop.*|ram.*"}[5m])
+              /
+              clamp_min(rate(node_disk_reads_completed_total{device!~"loop.*|ram.*"}[5m]), 1)
+            ) > 0.05
+            or
+            (
+              rate(node_disk_write_time_seconds_total{device!~"loop.*|ram.*"}[5m])
+              /
+              clamp_min(rate(node_disk_writes_completed_total{device!~"loop.*|ram.*"}[5m]), 1)
+            ) > 0.05
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Linux VM disk latency high"
+            description: "Linux VM {{ $labels.vm_name }} disk {{ $labels.device }} has disk latency above 50ms."
+
+        - alert: WindowsVMHighIOPS
+          expr: rate(windows_logical_disk_reads_total{volume!~"_Total"}[5m]) + rate(windows_logical_disk_writes_total{volume!~"_Total"}[5m]) > 5000
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Windows VM high IOPS"
+            description: "Windows VM {{ $labels.vm_name }} volume {{ $labels.volume }} is above 5000 IOPS."
+
+        - alert: LinuxVMHighIOPS
+          expr: rate(node_disk_reads_completed_total{device!~"loop.*|ram.*"}[5m]) + rate(node_disk_writes_completed_total{device!~"loop.*|ram.*"}[5m]) > 5000
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Linux VM high IOPS"
+            description: "Linux VM {{ $labels.vm_name }} disk {{ $labels.device }} is above 5000 IOPS."
+
+        - alert: WindowsVMHighDiskThroughput
+          expr: rate(windows_logical_disk_read_bytes_total{volume!~"_Total"}[5m]) + rate(windows_logical_disk_write_bytes_total{volume!~"_Total"}[5m]) > 104857600
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Windows VM high disk throughput"
+            description: "Windows VM {{ $labels.vm_name }} volume {{ $labels.volume }} is above 100 MiB/s."
+
+        - alert: LinuxVMHighDiskThroughput
+          expr: rate(node_disk_read_bytes_total{device!~"loop.*|ram.*"}[5m]) + rate(node_disk_written_bytes_total{device!~"loop.*|ram.*"}[5m]) > 104857600
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Linux VM high disk throughput"
+            description: "Linux VM {{ $labels.vm_name }} disk {{ $labels.device }} is above 100 MiB/s."
+
+        - alert: LinuxVMDiskIOStuck
+          expr: rate(node_disk_io_time_seconds_total{device!~"loop.*|ram.*"}[5m]) > 0.9
+          for: 15m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Linux VM disk IO stuck/saturated"
+            description: "Linux VM {{ $labels.vm_name }} disk {{ $labels.device }} is busy more than 90% for 15m."
+
+        - alert: LinuxVMHighDiscardRate
+          expr: rate(node_disk_discards_completed_total{device!~"loop.*|ram.*"}[5m]) > 1000
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Linux VM high discard rate"
+            description: "Linux VM {{ $labels.vm_name }} disk {{ $labels.device }} has high discard rate."
+        - alert: WindowsVMNoDiskIO
+          expr: |
+            (
+              rate(windows_logical_disk_reads_total{volume!~"_Total"}[15m])
+              +
+              rate(windows_logical_disk_writes_total{volume!~"_Total"}[15m])
+            ) == 0
+          for: 30m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Windows VM has no disk I/O"
+            description: "Windows VM {{ $labels.vm_name }} volume {{ $labels.volume }} has had no read/write I/O for 30 minutes."
+        - alert: LinuxVMNoDiskIO
+          expr: |
+            (
+              rate(node_disk_reads_completed_total{device!~"loop.*|ram.*"}[15m])
+              +
+              rate(node_disk_writes_completed_total{device!~"loop.*|ram.*"}[15m])
+            ) == 0
+          for: 30m
+          labels:
+            severity: warning
+          annotations:
+            summary: "Linux VM has no disk I/O"
+            description: "Linux VM {{ $labels.vm_name }} disk {{ $labels.device }} has had no read/write I/O for 30 minutes."
+        - alert: WindowsVMIdle
+          expr: |
+            (
+              100 - (avg by (namespace, vm_name) (rate(windows_cpu_time_total{mode="idle"}[15m])) * 100)
+            ) < 2
+            and
+            (
+              sum by (namespace, vm_name) (
+                rate(windows_logical_disk_reads_total{volume!~"_Total"}[15m])
+                +
+                rate(windows_logical_disk_writes_total{volume!~"_Total"}[15m])
+              )
+            ) < 1
+            and
+            (
+              sum by (namespace, vm_name) (
+                rate(windows_net_bytes_total[15m])
+              )
+            ) < 10240
+          for: 1h
+          labels:
+            severity: info
+          annotations:
+            summary: "Windows VM appears idle"
+            description: "Windows VM {{ $labels.vm_name }} in namespace {{ $labels.namespace }} has very low CPU, disk I/O, and network activity for 1 hour."
+        - alert: LinuxVMIdle
+          expr: |
+            (
+              100 - (avg by (namespace, vm_name) (rate(node_cpu_seconds_total{mode="idle"}[15m])) * 100)
+            ) < 2
+            and
+            (
+              sum by (namespace, vm_name) (
+                rate(node_disk_reads_completed_total{device!~"loop.*|ram.*"}[15m])
+                +
+                rate(node_disk_writes_completed_total{device!~"loop.*|ram.*"}[15m])
+              )
+            ) < 1
+            and
+            (
+              sum by (namespace, vm_name) (
+                rate(node_network_receive_bytes_total{device!~"lo"}[15m])
+                +
+                rate(node_network_transmit_bytes_total{device!~"lo"}[15m])
+              )
+            ) < 10240
+          for: 1h
+          labels:
+            severity: info
+          annotations:
+            summary: "Linux VM appears idle"
+            description: "Linux VM {{ $labels.vm_name }} in namespace {{ $labels.namespace }} has very low CPU, disk I/O, and network activity for 1 hour."

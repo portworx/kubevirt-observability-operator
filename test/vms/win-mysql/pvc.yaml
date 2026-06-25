@@ -1,0 +1,38 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: win-mssql-boot-pxe-raw-template-winrm0
+  namespace: openshift-virtualization-os-images
+  labels:
+    app: containerized-data-importer
+  annotations:
+    cdi.kubevirt.io/storage.import.endpoint: http://kubevirt-registry-528.pwx.kubevirt-observability.com/new_images/windows-golden-cloudinit-working.qcow2
+    pvc.source: "cloned"
+spec:
+  volumeMode: Block
+  storageClassName: raw-vol-sc
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 100Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: win-mssql-data-pxe-raw-template-latest0
+  namespace: openshift-virtualization-os-images
+  labels:
+    app: containerized-data-importer
+  annotations:
+    cdi.kubevirt.io/storage.import.endpoint: http://kubevirt-registry-528.pwx.kubevirt-observability.com/new_images/kubevirt-windows-mssql-discard-disk-1.qcow2 
+    pvc.source: "cloned"
+spec:
+  volumeMode: Block
+  storageClassName: raw-vol-sc
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 100Gi
+---

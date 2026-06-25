@@ -1,0 +1,166 @@
+apiVersion: kubevirt.io/v1
+kind: VirtualMachine
+metadata:
+  labels:
+    app: fio-vm-multi-disk
+    kubevirt.io/os: rhel
+  name: fio-vm-multi-disk
+  annotations:
+    pvc.source: "cloned"
+    username: "ubuntu"
+spec:
+  runStrategy: RerunOnFailure
+  template:
+    metadata:
+      annotations:
+        vm.kubevirt.io/workload: server
+      labels:
+        username: "ubuntu"
+    spec:
+      domain:
+        cpu:
+          cores: 2
+        devices:
+          disks:
+            - bootOrder: 1
+              blockSize:
+                custom:
+                  logical: 512
+                  physical: 4096
+              disk:
+                bus: virtio
+              name: rootdisk
+            - name: fio-data-disk-1
+              blockSize:
+                custom:
+                  logical: 4096
+                  physical: 4096
+              disk:
+                bus: virtio
+            - name: fio-data-disk-2
+              blockSize:
+                custom:
+                  logical: 4096
+                  physical: 4096
+              disk:
+                bus: virtio
+            - name: fio-data-disk-3
+              blockSize:
+                custom:
+                  logical: 4096
+                  physical: 4096
+              disk:
+                bus: virtio
+            - name: cloudinitvolume
+              disk:
+                bus: virtio
+          interfaces:
+            - name: default
+              masquerade: {}
+          networkInterfaceMultiqueue: true
+          rng: {}
+        features:
+          acpi: {}
+          smm:
+            enabled: true
+        firmware:
+          bootloader:
+            efi: {}
+        resources:
+          requests:
+            cpu: 2
+            memory: 4096M
+      networks:
+        - name: default
+          pod: {}
+      tolerations:
+        - effect: NoSchedule
+          key: node-role.kubernetes.io/master
+          operator: Exists
+      evictionStrategy: LiveMigrate
+      terminationGracePeriodSeconds: 180
+      volumes:
+        - dataVolume:
+            name: fio-root-disk
+          name: rootdisk
+        - name: fio-data-disk-1
+          persistentVolumeClaim:
+            claimName: fio-data-disk-1
+        - name: fio-data-disk-2
+          persistentVolumeClaim:
+            claimName: fio-data-disk-2
+        - name: fio-data-disk-3
+          persistentVolumeClaim:
+            claimName: fio-data-disk-3
+        - cloudInitNoCloud:
+            secretRef:
+              name: fio-vm-userdata
+          name: cloudinitvolume
+  dataVolumeTemplates:
+    - metadata:
+        name: fio-root-disk
+        annotations:
+          cdi.kubevirt.io/storage.usePopulator: "true"
+      spec:
+        pvc:
+          storageClassName: fada-raw-sc-wfcc 
+          accessModes:
+            - ReadWriteMany
+          resources:
+            requests:
+              storage: 60Gi
+          volumeMode: Block
+        source:
+          http:
+            url: http://kubevirt-registry-528.pwx.kubevirt-observability.com/new_images/rhel-9-template.qcow2
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: fio-data-disk-1
+  labels:
+    portworx.io/kubevirt: "true"
+  annotations:
+    cdi.kubevirt.io/storage.usePopulator: "true"
+spec:
+  volumeMode: Block
+  storageClassName: fada-raw-sc-wfcc 
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 50Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: fio-data-disk-2
+  labels:
+    portworx.io/kubevirt: "true"
+  annotations:
+    cdi.kubevirt.io/storage.usePopulator: "true"
+spec:
+  volumeMode: Block
+  storageClassName: fada-raw-sc-wfcc 
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 50Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: fio-data-disk-3
+  labels:
+    portworx.io/kubevirt: "true"
+  annotations:
+    cdi.kubevirt.io/storage.usePopulator: "true"
+spec:
+  volumeMode: Block
+  storageClassName: fada-raw-sc-wfcc 
+  accessModes:
+    - ReadWriteMany
+  resources:
+    requests:
+      storage: 50Gi

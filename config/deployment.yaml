@@ -1,0 +1,50 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kubevirt-observability-operator
+  namespace: kubevirt-observability-system
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kubevirt-observability-operator
+  template:
+    metadata:
+      labels:
+        app: kubevirt-observability-operator
+    spec:
+      serviceAccountName: kubevirt-observability-operator
+      containers:
+        - name: manager
+          image: <KUBEVIRT-OBSERVABILITY-OPERATOR-IMAGE> 
+          imagePullPolicy: IfNotPresent
+          args:
+            - --leader-elect
+          ports:
+            - containerPort: 8080
+              name: metrics
+            - containerPort: 8081
+              name: healthz
+            - containerPort: 9443
+              name: webhook
+          volumeMounts:
+            - name: webhook-certs
+              mountPath: /tmp/k8s-webhook-server/serving-certs
+              readOnly: true
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8081
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8081
+          env:
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+      volumes:
+        - name: webhook-certs
+          secret:
+            secretName: kubevirt-observability-webhook-certs

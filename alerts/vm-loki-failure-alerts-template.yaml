@@ -1,0 +1,99 @@
+apiVersion: loki.grafana.com/v1
+kind: AlertingRule
+metadata:
+  name: vm-loki-failure-alerts
+  namespace: __NAMESPACE__
+  labels:
+    app: kubevirt-observability
+spec:
+  tenantID: application
+  groups:
+    - name: vm.loki.failure.alerts
+      interval: 1m
+      rules:
+        - alert: WindowsVMEvent129Detected
+          expr: |
+            sum by (kubernetes_namespace_name, vm_name) (
+              count_over_time({kubernetes_namespace_name="__NAMESPACE__", source="windows_eventlog", os="windows"} |~ "(?i)(event id.?129|eventid.?129|reset to device|storahci|iastor|disk timeout)" [5m])
+            ) > 0
+          for: 1m
+          labels:
+            severity: critical
+            os: windows
+          annotations:
+            summary: "Windows VM Event 129 / storage reset detected"
+            description: "Windows VM {{ $labels.vm_name }} in namespace {{ $labels.kubernetes_namespace_name }} reported Event 129 or storage reset symptoms."
+
+        - alert: WindowsVMBSODOrWERDetected
+          expr: |
+            sum by (kubernetes_namespace_name, vm_name) (
+              count_over_time({kubernetes_namespace_name="__NAMESPACE__", source="windows_eventlog", os="windows"} |~ "(?i)(bugcheck|blue screen|bsod|windows error reporting|wer|memory.dmp|system rebooted without cleanly shutting down)" [5m])
+            ) > 0
+          for: 1m
+          labels:
+            severity: critical
+            os: windows
+          annotations:
+            summary: "Windows VM BSOD/WER detected"
+            description: "Windows VM {{ $labels.vm_name }} in namespace {{ $labels.kubernetes_namespace_name }} reported crash, bugcheck, BSOD, or WER event."
+
+        - alert: LinuxVMKernelPanicDetected
+          expr: |
+            sum by (kubernetes_namespace_name, vm_name) (
+              count_over_time({kubernetes_namespace_name="__NAMESPACE__", source="linux_syslog", os="linux"} |~ "(?i)(kernel panic|panic:|oops:|BUG:|soft lockup|hard lockup|hung task)" [5m])
+            ) > 0
+          for: 1m
+          labels:
+            severity: critical
+            os: linux
+          annotations:
+            summary: "Linux VM kernel crash/panic detected"
+            description: "Linux VM {{ $labels.vm_name }} in namespace {{ $labels.kubernetes_namespace_name }} reported kernel panic, oops, lockup, or hung task."
+
+        - alert: VMIOErrorDetected
+          expr: |
+            sum by (kubernetes_namespace_name, vm_name, os) (
+              count_over_time({kubernetes_namespace_name="__NAMESPACE__", source=~"linux_syslog|windows_eventlog"} |~ "(?i)(i/o error|io error|blk_update_request|buffer i/o error|end_request: I/O error|medium error|device error|disk error|reset to device|bad sector)" [5m])
+            ) > 0
+          for: 1m
+          labels:
+            severity: critical
+          annotations:
+            summary: "VM disk I/O error detected"
+            description: "VM {{ $labels.vm_name }} in namespace {{ $labels.kubernetes_namespace_name }} reported disk I/O errors."
+
+        - alert: VMFilesystemErrorDetected
+          expr: |
+            sum by (kubernetes_namespace_name, vm_name, os) (
+              count_over_time({kubernetes_namespace_name="__NAMESPACE__", source=~"linux_syslog|windows_eventlog"} |~ "(?i)(xfs.*error|ext4.*error|filesystem error|file system corruption|ntfs.*corrupt|ntfs.*error|remounting filesystem read-only|journal has aborted)" [5m])
+            ) > 0
+          for: 1m
+          labels:
+            severity: critical
+          annotations:
+            summary: "VM filesystem error detected"
+            description: "VM {{ $labels.vm_name }} in namespace {{ $labels.kubernetes_namespace_name }} reported filesystem corruption or filesystem errors."
+
+        - alert: VMNetworkErrorDetected
+          expr: |
+            sum by (kubernetes_namespace_name, vm_name, os) (
+              count_over_time({kubernetes_namespace_name="__NAMESPACE__", source=~"linux_syslog|windows_eventlog"} |~ "(?i)(network unreachable|connection reset|link is down|link down|nic.*error|tcp.*retransmit|packet loss|dns.*fail|dhcp.*fail|adapter.*disconnected)" [10m])
+            ) > 5
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "VM network errors detected"
+            description: "VM {{ $labels.vm_name }} in namespace {{ $labels.kubernetes_namespace_name }} reported repeated network errors."
+
+        - alert: VMHighLogVolume
+          expr: |
+            sum by (kubernetes_namespace_name, vm_name, os) (
+              count_over_time({kubernetes_namespace_name="__NAMESPACE__", source=~"linux_syslog|windows_eventlog"}[5m])
+            ) > 5000
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "VM pushing high log volume"
+            description: "VM {{ $labels.vm_name }} in namespace {{ $labels.kubernetes_namespace_name }} is pushing more than 5000 log lines per 5 minutes."

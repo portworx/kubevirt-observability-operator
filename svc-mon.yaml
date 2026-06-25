@@ -1,0 +1,13 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: external-service-monitor
+  namespace: oel79-randrw-bn3-fio-1
+spec:
+  selector:
+    matchLabels:
+      app: vm-metrics 
+  endpoints:
+    - port: metrics
+      interval: 30s
+
