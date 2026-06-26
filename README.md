@@ -1,16 +1,16 @@
-# KubeVirt Observability Operator
+# KubeVirt Virtual Machine Observability Platform
 
-KubeVirt Observability Operator provides end-to-end observability for Linux and Windows Virtual Machines running on **KubeVirt** and **Red Hat OpenShift Virtualization**.
+**KubeVirt Observability Operator** is the first component of the **KubeVirt Virtual Machine Observability Platform**. It provides end-to-end observability for Linux and Windows virtual machines running on **KubeVirt** and **Red Hat OpenShift Virtualization**.
 
-It automates deployment and configuration of metrics, logs, dashboards, and alerting so platform teams can monitor virtual machines using the cloud-native observability stack.
+The operator automates deployment and lifecycle management of observability components, enabling platform teams to collect metrics, logs, dashboards, and alerts using the cloud-native observability stack, including **Prometheus**, **Grafana**, **Grafana Alloy**, **Loki**, and **Alertmanager**.
 
 ---
 
 ## Why KubeVirt Observability Operator?
 
-Operating virtual machines at scale requires visibility into guest operating systems, not just the Kubernetes infrastructure.
+Modern virtual machine platforms require observability that extends beyond Kubernetes infrastructure metrics. Operators need visibility into guest operating systems to troubleshoot performance issues, storage bottlenecks, Windows Event Logs, Linux system logs, and application health.
 
-This operator automates observability for Linux and Windows virtual machines by deploying and configuring the required monitoring components, integrating with Prometheus, Loki, Grafana, and Alertmanager.
+KubeVirt Observability Operator automatically deploys and configures the required observability components inside Linux and Windows virtual machines while integrating with the Kubernetes observability ecosystem. It provides a consistent, automated approach to collecting metrics, logs, dashboards, and alerts across virtual machine workloads.
 
 ## Features
 
@@ -56,29 +56,29 @@ This operator automates observability for Linux and Windows virtual machines by 
 # Architecture
 
 ```text
-                 +------------------------------+
-                 | KubeVirt Virtual Machines    |
-                 +--------------+---------------+
-                                |
-              +-----------------+-----------------+
-              |                                   |
-         Linux VM                           Windows VM
-              |                                   |
-       node_exporter                    windows_exporter
-              |                                   |
-              +---------------+-------------------+
-                              |
-                        Grafana Alloy
-                              |
-                             Loki
-                              |
-                        Prometheus
-                              |
-               +--------------+--------------+
-               |                             |
-            Grafana                   Alertmanager
-                                              |
-                                            Slack
+                     KubeVirt Cluster
+                            │
+          ┌─────────────────┴─────────────────┐
+          │                                   │
+      Linux VM                          Windows VM
+          │                                   │
+   node_exporter                     windows_exporter
+          │                                   │
+          └──────────────┬────────────────────┘
+                         │
+                   Grafana Alloy
+                         │
+               ┌─────────┴─────────┐
+               │                   │
+          Prometheus             Loki
+               │                   │
+               └─────────┬─────────┘
+                         │
+                     Grafana
+                         │
+                   Alertmanager
+                         │
+                       Slack
 ```
 
 ---
