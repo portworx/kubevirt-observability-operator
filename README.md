@@ -1,41 +1,99 @@
 # KubeVirt Virtual Machine Observability Platform
 
-**KubeVirt Observability Operator** is the first component of the **KubeVirt Virtual Machine Observability Platform**. It provides end-to-end observability for Linux and Windows virtual machines running on **KubeVirt** and **Red Hat OpenShift Virtualization**.
+> **Project Status:** Active Development
+>
+> **KubeVirt Observability Operator** is the first component of the **KubeVirt Virtual Machine Observability Platform**.
+>
+> The project is under active development. Upcoming releases will introduce **Observability Profiles**, **Event Filtering**, **Namespace-local Secrets**, and **QEMU Guest Agent (QGA)** integration.
 
-The operator automates deployment and lifecycle management of observability components, enabling platform teams to collect metrics, logs, dashboards, and alerts using the cloud-native observability stack, including **Prometheus**, **Grafana**, **Grafana Alloy**, **Loki**, and **Alertmanager**.
+KubeVirt Observability Operator provides end-to-end observability for **Linux** and **Windows** virtual machines running on **KubeVirt** and **Red Hat OpenShift Virtualization**.
+
+The operator automates deployment and lifecycle management of observability components, enabling platform teams to collect **metrics**, **logs**, **dashboards**, and **alerts** using the cloud-native observability stack.
+
+Supported integrations include:
+
+* Prometheus
+* Grafana
+* Grafana Alloy
+* OpenShift Loki
+* Alertmanager
+* Slack
 
 ---
 
 ## Why KubeVirt Observability Operator?
 
-Modern virtual machine platforms require observability that extends beyond Kubernetes infrastructure metrics. Operators need visibility into guest operating systems to troubleshoot performance issues, storage bottlenecks, Windows Event Logs, Linux system logs, and application health.
+Modern virtual machine platforms require observability beyond Kubernetes infrastructure metrics.
 
-KubeVirt Observability Operator automatically deploys and configures the required observability components inside Linux and Windows virtual machines while integrating with the Kubernetes observability ecosystem. It provides a consistent, automated approach to collecting metrics, logs, dashboards, and alerts across virtual machine workloads.
+Platform engineers need visibility into guest operating systems to troubleshoot:
+
+* Windows Event Logs
+* Linux system logs
+* Storage failures
+* Event 129
+* BSOD / BugCheck
+* Filesystem errors
+* Performance bottlenecks
+* Guest operating system health
+
+KubeVirt Observability Operator automatically deploys and configures observability components inside Linux and Windows virtual machines while integrating with the Kubernetes observability ecosystem.
+
+---
+
+## Architecture
+
+```text
+                         KubeVirt Cluster
+                                │
+          ┌─────────────────────┴─────────────────────┐
+          │                                           │
+      Linux VM                                  Windows VM
+          │                                           │
+   node_exporter                           windows_exporter
+          │                                           │
+          └─────────────────┬─────────────────────────┘
+                            │
+                      Grafana Alloy
+                      │            │
+                 Prometheus       Loki
+                      │            │
+                      └──────┬─────┘
+                             │
+                         Grafana
+                             │
+                      Alertmanager
+                             │
+                           Slack
+```
+
+---
 
 ## Features
 
 ### Metrics
 
-* Linux monitoring using **node_exporter**
-* Windows monitoring using **windows_exporter**
+* Linux monitoring using node_exporter
+* Windows monitoring using windows_exporter
 * Automatic Prometheus integration
 * VM-specific Prometheus alert rules
-* Unified dashboards for Linux and Windows
+* Unified Linux and Windows dashboards
 
 ### Logging
 
-* Grafana Alloy deployment and configuration
+* Grafana Alloy deployment
 * OpenShift Loki integration
-* Linux system logs
-* Windows Event Logs
-* VM-specific Loki alert rules
+* Linux syslog collection
+* Windows Event Log collection
+* VM-aware log labeling
 
 ### Dashboards
 
-* Unified Grafana dashboards
-* Prometheus metrics visualization
-* Loki log exploration
-* Linux and Windows support
+* Unified metrics dashboard
+* VM log analytics
+* Failure analytics
+* Infrastructure health
+* Storage performance
+* Guest operating system insights
 
 ### Alerting
 
@@ -44,63 +102,61 @@ KubeVirt Observability Operator automatically deploys and configures the require
 * Alertmanager integration
 * Slack notifications
 
-### VM Bootstrap
+### Bootstrap
 
-* Linux Cloud-Init support
-* Windows Sysprep support
+* Linux Cloud-Init
+* Windows Sysprep
 * Existing VM onboarding
 * Automatic observability bootstrap
 
 ---
 
-# Architecture
+## Screenshots
 
-```text
-                     KubeVirt Cluster
-                            │
-          ┌─────────────────┴─────────────────┐
-          │                                   │
-      Linux VM                          Windows VM
-          │                                   │
-   node_exporter                     windows_exporter
-          │                                   │
-          └──────────────┬────────────────────┘
-                         │
-                   Grafana Alloy
-                         │
-               ┌─────────┴─────────┐
-               │                   │
-          Prometheus             Loki
-               │                   │
-               └─────────┬─────────┘
-                         │
-                     Grafana
-                         │
-                   Alertmanager
-                         │
-                       Slack
-```
+### Unified Metrics Dashboard
+
+Monitor Linux and Windows virtual machine CPU, memory, filesystem, storage, network, latency, queue depth, and service health from a single Grafana dashboard.
+
+![Unified Metrics Dashboard](docs/images/prometheus-dashboard.png)
+
+### Virtual Machine Log Analytics
+
+Analyze Linux syslog and Windows Event Logs using Grafana Loki with namespace and virtual machine level filtering.
+
+![Virtual Machine Log Analytics](docs/images/loki-dashboard.png)
+
+### Failure Analytics
+
+Detect Windows Event 129, BSOD, WER events, Linux kernel panics, filesystem failures, storage issues, and other guest operating system failures.
+
+![Failure Analytics](docs/images/failure-analytics.png)
+
+### Slack Notifications
+
+Receive real-time Prometheus and Loki alerts through Alertmanager with VM name, namespace, operating system, severity, and failure details.
+
+![Slack Notifications](docs/images/slack-alerts.png)
 
 ---
 
-# Supported Components
+## Supported Components
 
 | Component                | Status |
-| ------------------------ | ------ |
-| Linux VMs                | ✅      |
-| Windows VMs              | ✅      |
-| KubeVirt                 | ✅      |
-| OpenShift Virtualization | ✅      |
-| Prometheus               | ✅      |
-| Grafana Alloy            | ✅      |
-| Loki                     | ✅      |
-| Grafana                  | ✅      |
-| Alertmanager             | ✅      |
-| Slack Notifications      | ✅      |
+| ------------------------ | :----: |
+| Linux Virtual Machines   |    ✅   |
+| Windows Virtual Machines |    ✅   |
+| KubeVirt                 |    ✅   |
+| OpenShift Virtualization |    ✅   |
+| Prometheus               |    ✅   |
+| Grafana Alloy            |    ✅   |
+| OpenShift Loki           |    ✅   |
+| Grafana                  |    ✅   |
+| Alertmanager             |    ✅   |
+| Slack Notifications      |    ✅   |
 
 ---
 
-# Current Capabilities
+## Current Capabilities
 
 * Automatic VM observability bootstrap
 * Metrics collection
@@ -109,31 +165,26 @@ KubeVirt Observability Operator automatically deploys and configures the require
 * Prometheus alerting
 * Loki alerting
 * Existing VM onboarding
-* Linux and Windows support
+* Linux and Windows guest observability
 
 ---
 
-# Roadmap
+## Roadmap
 
-## v0.2
+### v0.2
 
 * Observability Profiles
 
   * Metrics Only
   * Logs Only
   * Full Observability
-
-* Filtered Windows Event Log collection
-
-* Filtered Linux log collection
-
+* Windows Event filtering
+* Linux log filtering
 * Namespace-local secrets
-
 * QEMU Guest Agent (QGA) transport
-
 * SSH as optional fallback
 
-## Future
+### Future
 
 * AI-assisted troubleshooting
 * MCP integration
@@ -143,7 +194,7 @@ KubeVirt Observability Operator automatically deploys and configures the require
 
 ---
 
-# Quick Start
+## Quick Start
 
 Clone the repository:
 
@@ -152,24 +203,27 @@ git clone https://github.com/portworx/kubevirt-observability-operator.git
 cd kubevirt-observability-operator
 ```
 
-Deploy the operator:
+Deploy the current manifests:
 
 ```bash
 kubectl apply -f config/
 ```
 
-Additional installation and configuration guides will be added in future releases.
+> Installation documentation is being expanded. See the roadmap for upcoming production installation, configuration, and upgrade guides.
 
 ---
 
-# Documentation
+## Documentation
 
-Documentation is being expanded and will include:
+Documentation is continuously expanding.
 
-* Installation Guide
-* Existing VM Onboarding
-* Linux Configuration
-* Windows Configuration
+Upcoming guides include:
+
+* Installation
+* Platform prerequisites
+* Existing VM onboarding
+* Linux configuration
+* Windows configuration
 * Dashboards
 * Alerting
 * Troubleshooting
@@ -177,23 +231,22 @@ Documentation is being expanded and will include:
 
 ---
 
-# Contributing
+## Contributing
 
 Contributions are welcome.
 
-Please read the project's `CONTRIBUTING.md` before submitting pull requests.
+Please read [CONTRIBUTING.md](CONTRIBUTING.md) before submitting pull requests.
 
 ---
 
-# Security
+## Security
 
-Please report security vulnerabilities privately to the project maintainers.
+Please report security vulnerabilities privately.
 
-See `SECURITY.md` for reporting guidance.
+See [SECURITY.md](SECURITY.md).
 
 ---
 
-# License
+## License
 
-This project is licensed under the Apache License 2.0.
-
+Apache License 2.0. See [LICENSE](LICENSE).
