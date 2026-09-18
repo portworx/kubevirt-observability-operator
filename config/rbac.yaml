@@ -29,7 +29,9 @@ rules:
     verbs: ["get", "list", "watch", "create", "update", "patch"]
   - apiGroups: ["rbac.authorization.k8s.io"]
     resources: ["clusterroles"]
-    resourceNames: ["kubevirt-observability-loki-reader"]
+    resourceNames:
+      - kubevirt-observability-loki-reader
+      - vm-monitoring-loki-reader
     verbs: ["bind", "get"]
   - apiGroups: ["route.openshift.io"]
     resources: ["routes"]
