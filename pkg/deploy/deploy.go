@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"time"
 
 	"github.com/portworx/kubevirt-observability-operator/pkg/grafana"
@@ -24,11 +25,13 @@ const (
 	lokiPackage   = "loki-operator"
 	lokiNamespace = "openshift-operators-redhat"
 
-	lokiStackName     = "logging-loki"
-	lokiStorageSecret = "loki-s3"
-	defaultLokiSize   = "1x.medium"
-	defaultSchema     = "v13"
-	defaultSchemaDate = "2024-04-02"
+	lokiStackName            = "logging-loki"
+	lokiStorageSecret        = "loki-s3"
+	defaultLokiSize          = "1x.medium"
+	defaultSchema            = "v13"
+	defaultSchemaDate        = "2024-04-02"
+	defaultLokiRetentionDays = 7
+	maxLokiRetentionDays     = 30
 )
 
 // Run starts deployment of the KubeVirt Observability Platform.
@@ -88,6 +91,28 @@ func Run(
 		return fmt.Errorf(
 			"no StorageClass was selected or discovered",
 		)
+	}
+
+	retentionDays := defaultLokiRetentionDays
+
+	if raw := os.Getenv("KVO_LOKI_RETENTION_DAYS"); raw != "" {
+		value, err := strconv.Atoi(raw)
+		if err != nil {
+			return fmt.Errorf(
+				"invalid KVO_LOKI_RETENTION_DAYS %q: expected an integer",
+				raw,
+			)
+		}
+
+		if value < 1 || value > maxLokiRetentionDays {
+			return fmt.Errorf(
+				"invalid KVO_LOKI_RETENTION_DAYS %d: supported range is 1-%d days",
+				value,
+				maxLokiRetentionDays,
+			)
+		}
+
+		retentionDays = value
 	}
 
 	operatorInstaller := operators.NewInstaller(
@@ -253,6 +278,7 @@ func Run(
 		Namespace:     loggingNamespace,
 		Size:          defaultLokiSize,
 		StorageClass:  storageClass,
+		RetentionDays: retentionDays,
 		StorageSecret: lokiStorageSecret,
 		SchemaVersion: defaultSchema,
 		SchemaDate:    defaultSchemaDate,
@@ -448,13 +474,24 @@ func Run(
 	fmt.Fprintln(out)
 	fmt.Fprintln(out, "Configuring Loki query access...")
 
+	if err := grafana.EnsureNamespace(
+		ctx,
+		clients.Kube,
+		grafana.DefaultNamespace,
+	); err != nil {
+		return fmt.Errorf(
+			"ensure Grafana namespace for Loki query access: %w",
+			err,
+		)
+	}
+
 	grafanaRBAC := grafana.NewRBACInstaller(
 		clients.Kube,
 	)
 
 	if err := grafanaRBAC.EnsureReaderFoundation(
 		ctx,
-		loggingNamespace,
+		grafana.DefaultNamespace,
 	); err != nil {
 		return fmt.Errorf(
 			"configure Loki reader RBAC: %w",
@@ -467,7 +504,7 @@ func Run(
 		"  %-32s %-14s %s/%s\n",
 		"Loki Reader ServiceAccount",
 		"READY",
-		loggingNamespace,
+		grafana.DefaultNamespace,
 		grafana.DefaultReaderServiceAccount,
 	)
 
@@ -479,6 +516,69 @@ func Run(
 	)
 
 	fmt.Fprintln(out)
+	fmt.Fprintln(out, "Configuring Grafana...")
+
+	grafanaInstaller := grafana.NewInstaller(
+		clients.Kube,
+		clients.Dynamic,
+	)
+
+	grafanaConfig := grafana.DefaultConfig()
+
+	grafanaResult, err := grafanaInstaller.Install(
+		ctx,
+		grafanaConfig,
+	)
+	if err != nil {
+		return fmt.Errorf(
+			"deploy Grafana observability dashboards: %w",
+			err,
+		)
+	}
+
+	fmt.Fprintf(
+		out,
+		"  %-32s %-14s %s/%s\n",
+		"Grafana",
+		"READY",
+		grafanaResult.Namespace,
+		grafanaResult.Deployment,
+	)
+
+	fmt.Fprintf(
+		out,
+		"  %-32s %-14s %s\n",
+		"Prometheus Datasource",
+		"READY",
+		grafana.DefaultPrometheusUID,
+	)
+
+	fmt.Fprintf(
+		out,
+		"  %-32s %-14s %s\n",
+		"Loki Datasource",
+		"READY",
+		grafana.DefaultLokiUID,
+	)
+
+	fmt.Fprintf(
+		out,
+		"  %-32s %-14s %s\n",
+		"VM Metrics Dashboard",
+		"READY",
+		"vm-monitoring-production-v6.json",
+	)
+
+	fmt.Fprintf(
+		out,
+		"  %-32s %-14s %s\n",
+		"VM Loki Dashboard",
+		"READY",
+		"vm-loki-failures-v6.json",
+	)
+
+	fmt.Fprintln(out)
+
 	fmt.Fprintln(out, "Deploying KubeVirt Observability Operator...")
 
 	vmInstaller := vmmonitoring.NewInstaller(

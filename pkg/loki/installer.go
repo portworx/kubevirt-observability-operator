@@ -27,6 +27,7 @@ type Config struct {
 	Namespace     string
 	Size          string
 	StorageClass  string
+	RetentionDays int
 	StorageSecret string
 	SchemaVersion string
 	SchemaDate    string
@@ -173,6 +174,28 @@ func (i *Installer) EnsureLokiStack(
 		return fmt.Errorf("Loki StorageClass is required")
 	}
 
+	if _, err := i.kube.
+		StorageV1().
+		StorageClasses().
+		Get(
+			ctx,
+			cfg.StorageClass,
+			metav1.GetOptions{},
+		); err != nil {
+		if apierrors.IsNotFound(err) {
+			return fmt.Errorf(
+				"configured Loki StorageClass %q does not exist; recreate the StorageClass or set KVO_STORAGE_CLASS to an available StorageClass",
+				cfg.StorageClass,
+			)
+		}
+
+		return fmt.Errorf(
+			"get Loki StorageClass %q: %w",
+			cfg.StorageClass,
+			err,
+		)
+	}
+
 	if cfg.StorageSecret == "" {
 		return fmt.Errorf("Loki storage Secret is required")
 	}
@@ -183,6 +206,17 @@ func (i *Installer) EnsureLokiStack(
 
 	if cfg.SchemaDate == "" {
 		cfg.SchemaDate = "2024-04-02"
+	}
+
+	if cfg.RetentionDays == 0 {
+		cfg.RetentionDays = 7
+	}
+
+	if cfg.RetentionDays < 1 || cfg.RetentionDays > 30 {
+		return fmt.Errorf(
+			"Loki retention must be between 1 and 30 days, got %d",
+			cfg.RetentionDays,
+		)
 	}
 
 	gvr := schema.GroupVersionResource{
@@ -201,6 +235,13 @@ func (i *Installer) EnsureLokiStack(
 			},
 			"spec": map[string]interface{}{
 				"managementState": "Managed",
+				"limits": map[string]interface{}{
+					"global": map[string]interface{}{
+						"retention": map[string]interface{}{
+							"days": int64(cfg.RetentionDays),
+						},
+					},
+				},
 				"rules": map[string]interface{}{
 					"enabled": true,
 					"namespaceSelector": map[string]interface{}{
