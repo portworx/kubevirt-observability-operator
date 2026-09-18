@@ -14,26 +14,40 @@ func main() {
 		os.Exit(1)
 	}
 
+	ctx := context.Background()
+
 	var err error
 
 	switch os.Args[1] {
 	case "preflight":
 		err = deploy.RunPreflight(
-			context.Background(),
+			ctx,
 			os.Stdout,
 		)
 
 	case "deploy":
-		fmt.Println("kvoctl deploy is not implemented yet")
+		err = deploy.Run(
+			ctx,
+			os.Stdin,
+			os.Stdout,
+		)
 
 	default:
-		fmt.Printf("unknown command: %s\n\n", os.Args[1])
+		fmt.Printf(
+			"unknown command: %s\n\n",
+			os.Args[1],
+		)
+
 		printUsage()
 		os.Exit(1)
 	}
 
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "\nERROR: %v\n", err)
+		fmt.Fprintf(
+			os.Stderr,
+			"\nERROR: %v\n",
+			err,
+		)
 		os.Exit(1)
 	}
 }
@@ -46,9 +60,20 @@ Usage:
 
 Commands:
   preflight    Check cluster prerequisites
-  deploy       Deploy KubeVirt Observability Platform (coming soon)
+  deploy       Deploy the KubeVirt Observability Platform
 
 Examples:
   kvoctl preflight
+  kvoctl deploy
+
+Environment variables for non-interactive deployment:
+  LOKI_S3_BUCKET
+  LOKI_S3_ENDPOINT
+  LOKI_S3_REGION
+  LOKI_S3_ACCESS_KEY
+  LOKI_S3_SECRET_KEY
+  KVO_STORAGE_CLASS
+  KVO_OPERATOR_IMAGE
+  KVO_CONFIG_DIR
 `)
 }

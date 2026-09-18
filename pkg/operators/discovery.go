@@ -20,35 +20,58 @@ const (
 // Status describes the state of an OLM-managed operator.
 type Status struct {
 	Name      string
+	Package   string
 	State     string
 	Namespace string
 	CSV       string
 	Phase     string
 }
 
-// Discover checks whether the operators required by the full platform are
-// already installed.
+// Discover checks whether the operators required by the platform are
+// installed.
+//
+// The Subscription is used as the source of truth for the installation
+// namespace. This avoids using copied CSVs that can appear in many namespaces
+// for operators with broad install scope.
 func Discover(
 	ctx context.Context,
 	client dynamic.Interface,
 ) ([]Status, error) {
 	results := []Status{
-		{Name: "OpenShift Logging Operator", State: operatorMissing},
-		{Name: "Loki Operator", State: operatorMissing},
-		{Name: "Grafana Operator", State: operatorMissing},
+		{
+			Name:    "OpenShift Logging Operator",
+			Package: "cluster-logging",
+			State:   operatorMissing,
+		},
+		{
+			Name:    "Loki Operator",
+			Package: "loki-operator",
+			State:   operatorMissing,
+		},
+		{
+			Name:    "Grafana Operator",
+			Package: "grafana-operator",
+			State:   operatorMissing,
+		},
 	}
 
-	gvr := schema.GroupVersionResource{
+	subscriptionGVR := schema.GroupVersionResource{
+		Group:    "operators.coreos.com",
+		Version:  "v1alpha1",
+		Resource: "subscriptions",
+	}
+
+	csvGVR := schema.GroupVersionResource{
 		Group:    "operators.coreos.com",
 		Version:  "v1alpha1",
 		Resource: "clusterserviceversions",
 	}
 
-	csvList, err := client.Resource(gvr).
+	subscriptions, err := client.
+		Resource(subscriptionGVR).
 		Namespace(metav1.NamespaceAll).
 		List(ctx, metav1.ListOptions{})
 	if err != nil {
-		// Some clusters may not expose OLM or the caller may not have access.
 		for i := range results {
 			results[i].State = operatorUnknown
 		}
@@ -56,26 +79,43 @@ func Discover(
 		return results, nil
 	}
 
-	for _, csv := range csvList.Items {
-		updateOperatorStatus(results, csv)
-	}
-
-	return results, nil
-}
-
-func updateOperatorStatus(results []Status, csv unstructured.Unstructured) {
-	name := strings.ToLower(csv.GetName())
-
-	displayName, _, _ := unstructured.NestedString(
-		csv.Object,
-		"spec",
-		"displayName",
-	)
-
-	searchValue := name + " " + strings.ToLower(displayName)
-
 	for i := range results {
-		if !matchesOperator(results[i].Name, searchValue) {
+		subscription := findSubscription(
+			subscriptions.Items,
+			results[i].Package,
+		)
+
+		if subscription == nil {
+			continue
+		}
+
+		results[i].State = operatorInstalled
+		results[i].Namespace = subscription.GetNamespace()
+
+		installedCSV, _, _ := unstructured.NestedString(
+			subscription.Object,
+			"status",
+			"installedCSV",
+		)
+
+		if installedCSV == "" {
+			// Subscription exists, but OLM has not yet resolved an installed CSV.
+			results[i].Phase = "Installing"
+			continue
+		}
+
+		results[i].CSV = installedCSV
+
+		csv, err := client.
+			Resource(csvGVR).
+			Namespace(subscription.GetNamespace()).
+			Get(
+				ctx,
+				installedCSV,
+				metav1.GetOptions{},
+			)
+		if err != nil {
+			results[i].Phase = "Unknown"
 			continue
 		}
 
@@ -85,52 +125,33 @@ func updateOperatorStatus(results []Status, csv unstructured.Unstructured) {
 			"phase",
 		)
 
-		results[i].State = operatorInstalled
-		results[i].Namespace = csv.GetNamespace()
-		results[i].CSV = csv.GetName()
+		if phase == "" {
+			phase = "Unknown"
+		}
+
 		results[i].Phase = phase
-
-		return
 	}
+
+	return results, nil
 }
 
-func matchesOperator(operatorName, value string) bool {
-	switch operatorName {
-	case "OpenShift Logging Operator":
-		return containsAny(
-			value,
-			"cluster-logging",
-			"openshift logging",
-			"red hat openshift logging",
+func findSubscription(
+	subscriptions []unstructured.Unstructured,
+	packageName string,
+) *unstructured.Unstructured {
+	for i := range subscriptions {
+		name, _, _ := unstructured.NestedString(
+			subscriptions[i].Object,
+			"spec",
+			"name",
 		)
 
-	case "Loki Operator":
-		return containsAny(
-			value,
-			"loki-operator",
-			"loki operator",
-		)
-
-	case "Grafana Operator":
-		return containsAny(
-			value,
-			"grafana-operator",
-			"grafana operator",
-		)
-
-	default:
-		return false
-	}
-}
-
-func containsAny(value string, candidates ...string) bool {
-	for _, candidate := range candidates {
-		if strings.Contains(value, strings.ToLower(candidate)) {
-			return true
+		if name == packageName {
+			return &subscriptions[i]
 		}
 	}
 
-	return false
+	return nil
 }
 
 // Ready returns true when an installed operator CSV is in Succeeded phase.
