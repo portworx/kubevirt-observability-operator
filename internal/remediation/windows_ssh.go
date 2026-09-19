@@ -1,7 +1,6 @@
 package remediation
 
 import (
-	"encoding/base64"
 	"fmt"
 	"strings"
 	"time"
@@ -20,7 +19,6 @@ func RunWindowsSSHBootstrap(
 	cfg WindowsSSHConfig,
 	script string,
 ) error {
-
 	signer, err := ssh.ParsePrivateKey(cfg.KeyPEM)
 	if err != nil {
 		return fmt.Errorf("parse private key: %w", err)
@@ -43,27 +41,28 @@ func RunWindowsSSHBootstrap(
 
 	tmpFile := `C:\Windows\Temp\kubevirt-observability-bootstrap.ps1`
 
-	// Step 1: upload/write script
+	// Step 1: stream the script over SSH stdin instead of embedding the
+	// complete script in the PowerShell command line. This avoids the
+	// Windows command-line length limit for large Alloy configurations.
 	{
 		session, err := client.NewSession()
 		if err != nil {
 			return fmt.Errorf("new ssh session: %w", err)
 		}
-		scriptB64 := base64.StdEncoding.EncodeToString([]byte(script))
+
+		session.Stdin = strings.NewReader(script)
 
 		writeCmd := fmt.Sprintf(
-			`[System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String("%s")) | Set-Content -Path '%s' -Encoding UTF8`,
-			scriptB64,
+			`[Console]::In.ReadToEnd() | Set-Content -Path '%s' -Encoding UTF8`,
 			tmpFile,
 		)
 
 		cmd := fmt.Sprintf(
-			`powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command %q`,
+			`powershell.exe -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "%s"`,
 			writeCmd,
 		)
 
 		out, err := session.CombinedOutput(cmd)
-
 		session.Close()
 
 		if err != nil {
@@ -75,7 +74,7 @@ func RunWindowsSSHBootstrap(
 		}
 	}
 
-	// Step 2: execute script file
+	// Step 2: execute the uploaded script file.
 	{
 		session, err := client.NewSession()
 		if err != nil {
@@ -89,7 +88,6 @@ func RunWindowsSSHBootstrap(
 		)
 
 		out, err := session.CombinedOutput(cmd)
-
 		if err != nil {
 			return fmt.Errorf(
 				"windows ssh remediation failed: %w output=%s",

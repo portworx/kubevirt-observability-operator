@@ -458,7 +458,7 @@ function Install-WindowsExporter {
     $arguments = @(
       '/i',
       $out,
-	  'ENABLED_COLLECTORS=[defaults],cpu,logical_disk,memory,net,os,service,system,textfile',
+	  'ENABLED_COLLECTORS=[defaults],mssql,textfile',
       'LISTEN_PORT=9182',
       'ADDLOCAL=FirewallException',
       '/qn'
