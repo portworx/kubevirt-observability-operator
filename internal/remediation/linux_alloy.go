@@ -52,12 +52,12 @@ sslcacert=/etc/pki/tls/certs/ca-bundle.crt
 REPO
     $SUDO yum install -y alloy
   elif command -v apt-get >/dev/null 2>&1; then
-    $SUDO apt-get update
-    $SUDO apt-get install -y gpg curl
+    DEBIAN_FRONTEND=noninteractive $SUDO apt-get update
+    DEBIAN_FRONTEND=noninteractive $SUDO apt-get install -y gpg curl
     curl -fsSL https://apt.grafana.com/gpg.key | gpg --dearmor | $SUDO tee /etc/apt/keyrings/grafana.gpg >/dev/null
     echo "deb [signed-by=/etc/apt/keyrings/grafana.gpg] https://apt.grafana.com stable main" | $SUDO tee /etc/apt/sources.list.d/grafana.list >/dev/null
-    $SUDO apt-get update
-    $SUDO apt-get install -y alloy
+    DEBIAN_FRONTEND=noninteractive $SUDO apt-get update
+    DEBIAN_FRONTEND=noninteractive $SUDO apt-get install -y alloy
   else
     echo "unsupported Linux package manager for Alloy install" >&2
     exit 1

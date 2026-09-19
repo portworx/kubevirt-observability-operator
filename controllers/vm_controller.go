@@ -22,6 +22,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 
+	routev1 "github.com/openshift/api/route/v1"
 	"github.com/portworx/kubevirt-observability-operator/api"
 	"github.com/portworx/kubevirt-observability-operator/internal/alloyconfig"
 	"github.com/portworx/kubevirt-observability-operator/internal/cloudinitmerge"
@@ -29,7 +30,6 @@ import (
 	"github.com/portworx/kubevirt-observability-operator/internal/remediation"
 	"github.com/portworx/kubevirt-observability-operator/internal/sysprepmerge"
 	"github.com/portworx/kubevirt-observability-operator/internal/verify"
-	routev1 "github.com/openshift/api/route/v1"
 )
 
 const (
@@ -1370,7 +1370,7 @@ func (r *VMReconciler) reconcileLinuxAlloy(
 		Address:    addr,
 		Username:   username,
 		PrivateKey: privateKey,
-		Timeout:    60 * time.Second,
+		Timeout:    5 * time.Minute,
 	}, script); err != nil {
 		return false, err
 	}
@@ -1435,7 +1435,6 @@ func (r *VMReconciler) reconcileWindowsAlloy(
 	vm *kubevirtv1.VirtualMachine,
 	ip string,
 ) (bool, error) {
-
 	token, err := r.getLokiWriterToken(ctx)
 	if err != nil {
 		return false, err
@@ -1459,7 +1458,6 @@ func (r *VMReconciler) reconcileWindowsAlloy(
 	if ann != nil &&
 		ann[api.AnnAlloyConfigHash] == desiredHash &&
 		ann[api.AnnAlloyInstalled] == "true" {
-
 		return false, nil
 	}
 
@@ -1480,40 +1478,50 @@ func (r *VMReconciler) reconcileWindowsAlloy(
 		return false, err
 	}
 
-	// Bootstrap already configured Alloy.
-	// Only update config/token drift if needed.
-	if state == "success" {
+	// Select the Alloy reconciliation path based on how the VM was onboarded.
+	//
+	// Original Windows bootstrap already installs Alloy, so only reconcile
+	// configuration/token drift.
+	//
+	// Existing VMs successfully remediated over SSH may not have Alloy
+	// installed yet, so perform the full Alloy installation.
+	var script string
 
-		script := remediation.WindowsAlloyUpdateScript(cfg, token)
+	switch {
+	case state == "success":
+		script = remediation.WindowsAlloyUpdateScript(cfg, token)
 
-		if err := remediation.RunWindowsSSHBootstrap(
-			sshCfg,
-			script,
-		); err != nil {
-			return false, err
-		}
+	case ann != nil && ann[api.AnnRemediationCompleted] == "true":
+		script = remediation.WindowsAlloyInstallScript(cfg, token)
 
-		base := vm.DeepCopy()
-
-		if vm.Annotations == nil {
-			vm.Annotations = map[string]string{}
-		}
-
-		vm.Annotations[api.AnnAlloyInstalled] = "true"
-		vm.Annotations[api.AnnAlloyConfigHash] = desiredHash
-
-		delete(vm.Annotations, api.AnnAlloyError)
-
-		if err := r.Patch(ctx, vm, client.MergeFrom(base)); err != nil {
-			return false, err
-		}
-
-		return true, nil
+	default:
+		return false, fmt.Errorf(
+			"windows bootstrap not completed yet",
+		)
 	}
 
-	return false, fmt.Errorf(
-		"windows bootstrap not completed yet",
-	)
+	if err := remediation.RunWindowsSSHBootstrap(
+		sshCfg,
+		script,
+	); err != nil {
+		return false, err
+	}
+
+	base := vm.DeepCopy()
+
+	if vm.Annotations == nil {
+		vm.Annotations = map[string]string{}
+	}
+
+	vm.Annotations[api.AnnAlloyInstalled] = "true"
+	vm.Annotations[api.AnnAlloyConfigHash] = desiredHash
+	delete(vm.Annotations, api.AnnAlloyError)
+
+	if err := r.Patch(ctx, vm, client.MergeFrom(base)); err != nil {
+		return false, err
+	}
+
+	return true, nil
 }
 
 func (r *VMReconciler) getLinuxPublicKey(ctx context.Context, namespace string) ([]byte, error) {
