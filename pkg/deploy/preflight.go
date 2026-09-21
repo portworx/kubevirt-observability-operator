@@ -6,6 +6,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/portworx/kubevirt-observability-operator/pkg/grafana"
 	"github.com/portworx/kubevirt-observability-operator/pkg/operators"
 	"github.com/portworx/kubevirt-observability-operator/pkg/platform"
 )
@@ -129,6 +130,48 @@ func RunPreflight(ctx context.Context, out io.Writer) error {
 			)
 
 		default:
+			if operator.Name == "Grafana Operator" {
+				discovery, discoverErr := grafana.Discover(
+					ctx,
+					clients.Kube,
+				)
+
+				switch {
+				case discoverErr != nil:
+					printStatus(
+						out,
+						operator.Name,
+						"NOT INSTALLED",
+						"existing Grafana discovery failed",
+					)
+
+				case discovery.Found:
+					printStatus(
+						out,
+						operator.Name,
+						"NOT INSTALLED",
+						"not required; existing Grafana will be reused",
+					)
+
+					printStatus(
+						out,
+						"Grafana",
+						"REUSING",
+						discovery.Namespace+"/"+discovery.Deployment,
+					)
+
+				default:
+					printStatus(
+						out,
+						operator.Name,
+						"NOT INSTALLED",
+						"not required; kvoctl will deploy Grafana",
+					)
+				}
+
+				continue
+			}
+
 			printStatus(
 				out,
 				operator.Name,
