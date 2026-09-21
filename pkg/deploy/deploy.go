@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/portworx/kubevirt-observability-operator/pkg/alerting"
 	"github.com/portworx/kubevirt-observability-operator/pkg/grafana"
 	"github.com/portworx/kubevirt-observability-operator/pkg/logging"
 	"github.com/portworx/kubevirt-observability-operator/pkg/loki"
@@ -334,11 +335,12 @@ func Run(
 	fmt.Fprintln(out)
 	fmt.Fprintln(out, "Waiting for LokiStack to become ready...")
 
-	if err := lokiInstaller.WaitForReady(
+	if err := lokiInstaller.WaitForReadyWithProgress(
 		ctx,
 		loggingNamespace,
 		lokiStackName,
 		20*time.Minute,
+		out,
 	); err != nil {
 		return fmt.Errorf(
 			"wait for LokiStack: %w",
@@ -576,6 +578,76 @@ func Run(
 		"READY",
 		"vm-loki-failures-v6.json",
 	)
+
+	fmt.Fprintln(out)
+
+	fmt.Fprintln(out, "Configuring alerting...")
+
+	alertingInstaller := alerting.NewInstaller(
+		clients.Kube,
+	)
+
+	alertingConfig := alerting.DefaultConfig()
+
+	alertingResult, alertingErr := alertingInstaller.Install(
+		ctx,
+		alertingConfig,
+	)
+
+	switch {
+	case alertingErr != nil:
+		// Alerting is optional. A failure to configure alert delivery must
+		// not prevent deployment of the observability platform.
+		fmt.Fprintf(
+			out,
+			"  %-32s %-14s %s\n",
+			"Slack Alerting",
+			"SKIPPED",
+			"unable to configure alert integration",
+		)
+
+	case !alertingResult.Enabled:
+		fmt.Fprintf(
+			out,
+			"  %-32s %-14s %s\n",
+			"Slack Alerting",
+			"DISABLED",
+			alertingResult.Reason,
+		)
+
+	case !alertingResult.Configured:
+		fmt.Fprintf(
+			out,
+			"  %-32s %-14s %s\n",
+			"Slack Alerting",
+			"SKIPPED",
+			alertingResult.Reason,
+		)
+
+	default:
+		fmt.Fprintf(
+			out,
+			"  %-32s %-14s\n",
+			"User Workload Alertmanager",
+			"READY",
+		)
+
+		fmt.Fprintf(
+			out,
+			"  %-32s %-14s\n",
+			"AlertmanagerConfig API",
+			"READY",
+		)
+
+		fmt.Fprintf(
+			out,
+			"  %-32s %-14s %s/%s\n",
+			"Slack Webhook Secret",
+			"READY",
+			alertingResult.Namespace,
+			alertingResult.SecretName,
+		)
+	}
 
 	fmt.Fprintln(out)
 

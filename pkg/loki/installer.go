@@ -3,6 +3,8 @@ package loki
 import (
 	"context"
 	"fmt"
+	"io"
+	"strings"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -340,8 +342,28 @@ func (i *Installer) WaitForReady(
 	name string,
 	timeout time.Duration,
 ) error {
+	return i.WaitForReadyWithProgress(
+		ctx,
+		namespace,
+		name,
+		timeout,
+		io.Discard,
+	)
+}
+
+func (i *Installer) WaitForReadyWithProgress(
+	ctx context.Context,
+	namespace string,
+	name string,
+	timeout time.Duration,
+	out io.Writer,
+) error {
 	if timeout == 0 {
 		timeout = 15 * time.Minute
+	}
+
+	if out == nil {
+		out = io.Discard
 	}
 
 	gvr := schema.GroupVersionResource{
@@ -356,9 +378,40 @@ func (i *Installer) WaitForReady(
 	ticker := time.NewTicker(10 * time.Second)
 	defer ticker.Stop()
 
+	startedAt := time.Now()
+
+	const reportInterval = 60 * time.Second
+
+	nextReport := reportInterval
+	lastSummary := ""
+
 	for {
 		select {
 		case <-waitCtx.Done():
+			summary := i.lokiPendingSummary(
+				ctx,
+				namespace,
+				name,
+			)
+
+			if summary != "" {
+				return fmt.Errorf(
+					"timeout waiting for LokiStack %s/%s to become ready\n\n"+
+						"Non-ready resources:\n%s\n"+
+						"Suggested checks:\n"+
+						"  oc get pods -n %s\n"+
+						"  oc get pvc -n %s\n"+
+						"  oc get lokistack %s -n %s -o yaml",
+					namespace,
+					name,
+					summary,
+					namespace,
+					namespace,
+					name,
+					namespace,
+				)
+			}
+
 			return fmt.Errorf(
 				"timeout waiting for LokiStack %s/%s to become ready",
 				namespace,
@@ -375,58 +428,291 @@ func (i *Installer) WaitForReady(
 					metav1.GetOptions{},
 				)
 
-			if err != nil {
+			if err == nil {
+				conditions, found, _ := unstructured.NestedSlice(
+					stack.Object,
+					"status",
+					"conditions",
+				)
+
+				if found {
+					for _, raw := range conditions {
+						condition, ok := raw.(map[string]interface{})
+						if !ok {
+							continue
+						}
+
+						conditionType, _, _ := unstructured.NestedString(
+							condition,
+							"type",
+						)
+
+						status, _, _ := unstructured.NestedString(
+							condition,
+							"status",
+						)
+
+						if conditionType == "Ready" && status == "True" {
+							return nil
+						}
+
+						if conditionType == "Degraded" && status == "True" {
+							reason, _, _ := unstructured.NestedString(
+								condition,
+								"reason",
+							)
+
+							message, _, _ := unstructured.NestedString(
+								condition,
+								"message",
+							)
+
+							return fmt.Errorf(
+								"LokiStack is degraded: %s: %s",
+								reason,
+								message,
+							)
+						}
+					}
+				}
+			}
+
+			elapsed := time.Since(startedAt)
+
+			if elapsed < nextReport {
 				continue
 			}
 
-			conditions, found, _ := unstructured.NestedSlice(
-				stack.Object,
-				"status",
-				"conditions",
+			summary := i.lokiPendingSummary(
+				waitCtx,
+				namespace,
+				name,
 			)
 
-			if !found {
-				continue
+			// Do not repeatedly print an identical resource state.
+			if summary != "" && summary != lastSummary {
+				fmt.Fprintf(
+					out,
+					"\nStill waiting for LokiStack after %s...\n%s\n",
+					elapsed.Round(time.Second),
+					summary,
+				)
+
+				lastSummary = summary
 			}
 
-			for _, raw := range conditions {
-				condition, ok := raw.(map[string]interface{})
-				if !ok {
-					continue
-				}
-
-				conditionType, _, _ := unstructured.NestedString(
-					condition,
-					"type",
-				)
-
-				status, _, _ := unstructured.NestedString(
-					condition,
-					"status",
-				)
-
-				if conditionType == "Ready" && status == "True" {
-					return nil
-				}
-
-				if conditionType == "Degraded" && status == "True" {
-					reason, _, _ := unstructured.NestedString(
-						condition,
-						"reason",
-					)
-
-					message, _, _ := unstructured.NestedString(
-						condition,
-						"message",
-					)
-
-					return fmt.Errorf(
-						"LokiStack is degraded: %s: %s",
-						reason,
-						message,
-					)
-				}
+			for nextReport <= elapsed {
+				nextReport += reportInterval
 			}
 		}
 	}
+}
+
+func (i *Installer) lokiPendingSummary(
+	ctx context.Context,
+	namespace string,
+	stackName string,
+) string {
+	var out strings.Builder
+
+	pods, err := i.kube.
+		CoreV1().
+		Pods(namespace).
+		List(
+			ctx,
+			metav1.ListOptions{},
+		)
+
+	if err == nil {
+		for _, pod := range pods.Items {
+			if !matchesLokiStackResource(
+				pod.Name,
+				pod.Labels,
+				stackName,
+			) {
+				continue
+			}
+
+			if isPodReady(&pod) {
+				continue
+			}
+
+			fmt.Fprintf(
+				&out,
+				"  %-32s %s\n",
+				"Namespace",
+				namespace,
+			)
+
+			fmt.Fprintf(
+				&out,
+				"  %-32s %s\n",
+				"Pod",
+				pod.Name,
+			)
+
+			fmt.Fprintf(
+				&out,
+				"  %-32s %s\n",
+				"Phase",
+				pod.Status.Phase,
+			)
+
+			for _, status := range pod.Status.InitContainerStatuses {
+				if status.Ready {
+					continue
+				}
+
+				fmt.Fprintf(
+					&out,
+					"  %-32s %s\n",
+					"InitContainer "+status.Name,
+					containerState(status),
+				)
+			}
+
+			for _, status := range pod.Status.ContainerStatuses {
+				if status.Ready {
+					continue
+				}
+
+				fmt.Fprintf(
+					&out,
+					"  %-32s %s\n",
+					"Container "+status.Name,
+					containerState(status),
+				)
+			}
+
+			fmt.Fprintln(&out)
+		}
+	}
+
+	pvcs, err := i.kube.
+		CoreV1().
+		PersistentVolumeClaims(namespace).
+		List(
+			ctx,
+			metav1.ListOptions{},
+		)
+
+	if err == nil {
+		for _, pvc := range pvcs.Items {
+			if !matchesLokiStackResource(
+				pvc.Name,
+				pvc.Labels,
+				stackName,
+			) {
+				continue
+			}
+
+			if pvc.Status.Phase == corev1.ClaimBound {
+				continue
+			}
+
+			fmt.Fprintf(
+				&out,
+				"  %-32s %s\n",
+				"Namespace",
+				namespace,
+			)
+
+			fmt.Fprintf(
+				&out,
+				"  %-32s %s\n",
+				"PVC",
+				pvc.Name,
+			)
+
+			fmt.Fprintf(
+				&out,
+				"  %-32s %s\n",
+				"Status",
+				pvc.Status.Phase,
+			)
+
+			if pvc.Spec.StorageClassName != nil {
+				fmt.Fprintf(
+					&out,
+					"  %-32s %s\n",
+					"StorageClass",
+					*pvc.Spec.StorageClassName,
+				)
+			}
+
+			fmt.Fprintln(&out)
+		}
+	}
+
+	return out.String()
+}
+
+func matchesLokiStackResource(
+	resourceName string,
+	labels map[string]string,
+	stackName string,
+) bool {
+	if strings.Contains(resourceName, stackName) {
+		return true
+	}
+
+	for key, value := range labels {
+		if strings.Contains(
+			strings.ToLower(key),
+			"loki",
+		) && value == stackName {
+			return true
+		}
+	}
+
+	return false
+}
+
+func isPodReady(
+	pod *corev1.Pod,
+) bool {
+	if pod.Status.Phase != corev1.PodRunning {
+		return false
+	}
+
+	for _, status := range pod.Status.InitContainerStatuses {
+		if !status.Ready {
+			return false
+		}
+	}
+
+	for _, status := range pod.Status.ContainerStatuses {
+		if !status.Ready {
+			return false
+		}
+	}
+
+	return true
+}
+
+func containerState(
+	status corev1.ContainerStatus,
+) string {
+	if status.State.Waiting != nil {
+		if status.State.Waiting.Reason != "" {
+			return status.State.Waiting.Reason
+		}
+
+		return "Waiting"
+	}
+
+	if status.State.Terminated != nil {
+		if status.State.Terminated.Reason != "" {
+			return "Terminated: " +
+				status.State.Terminated.Reason
+		}
+
+		return "Terminated"
+	}
+
+	if status.State.Running != nil {
+		return "Running / NotReady"
+	}
+
+	return "NotReady"
 }

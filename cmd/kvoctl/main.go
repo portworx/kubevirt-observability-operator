@@ -75,5 +75,11 @@ Environment variables for non-interactive deployment:
   KVO_STORAGE_CLASS
   KVO_OPERATOR_IMAGE
   KVO_CONFIG_DIR
+
+Optional alerting:
+
+  KVO_SLACK_WEBHOOK_URL
+      Slack incoming webhook used for alert notifications.
+      When omitted, alert integration is not configured and deployment continues normally.
 `)
 }
