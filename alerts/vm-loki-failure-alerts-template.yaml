@@ -4,7 +4,8 @@ metadata:
   name: vm-loki-failure-alerts
   namespace: __NAMESPACE__
   labels:
-    app: kubevirt-observability
+    app: vm-monitoring
+    app.kubernetes.io/managed-by: kubevirt-observability
 spec:
   tenantID: application
   groups:
@@ -18,24 +19,26 @@ spec:
             ) > 0
           for: 1m
           labels:
+            kvo_notification: immediate
             severity: critical
             os: windows
           annotations:
             summary: "Windows VM Event 129 / storage reset detected"
             description: "Windows VM {{ $labels.vm_name }} in namespace {{ $labels.kubernetes_namespace_name }} reported Event 129 or storage reset symptoms."
 
-        - alert: WindowsVMBSODOrWERDetected
+        - alert: WindowsVMBSODDetected
           expr: |
             sum by (kubernetes_namespace_name, vm_name) (
-              count_over_time({kubernetes_namespace_name="__NAMESPACE__", source="windows_eventlog", os="windows"} |~ "(?i)(bugcheck|blue screen|bsod|windows error reporting|wer|memory.dmp|system rebooted without cleanly shutting down)" [5m])
+              count_over_time({kubernetes_namespace_name="__NAMESPACE__", source="windows_eventlog", os="windows"} |~ "(?i)(bugcheck|bug check|blue screen|bsod|stop error|memory[.]dmp|rebooted from a bugcheck)" [5m])
             ) > 0
           for: 1m
           labels:
+            kvo_notification: immediate
             severity: critical
             os: windows
           annotations:
-            summary: "Windows VM BSOD/WER detected"
-            description: "Windows VM {{ $labels.vm_name }} in namespace {{ $labels.kubernetes_namespace_name }} reported crash, bugcheck, BSOD, or WER event."
+            summary: "Windows VM BSOD detected"
+            description: "Windows VM {{ $labels.vm_name }} in namespace {{ $labels.kubernetes_namespace_name }} reported a BSOD, bugcheck, stop error, or crash dump event."
 
         - alert: LinuxVMKernelPanicDetected
           expr: |
@@ -44,6 +47,7 @@ spec:
             ) > 0
           for: 1m
           labels:
+            kvo_notification: immediate
             severity: critical
             os: linux
           annotations:
@@ -57,6 +61,7 @@ spec:
             ) > 0
           for: 1m
           labels:
+            kvo_notification: immediate
             severity: critical
           annotations:
             summary: "VM disk I/O error detected"
@@ -69,6 +74,7 @@ spec:
             ) > 0
           for: 1m
           labels:
+            kvo_notification: immediate
             severity: critical
           annotations:
             summary: "VM filesystem error detected"
@@ -81,6 +87,7 @@ spec:
             ) > 5
           for: 5m
           labels:
+            kvo_notification: normal
             severity: warning
           annotations:
             summary: "VM network errors detected"
@@ -93,6 +100,7 @@ spec:
             ) > 5000
           for: 10m
           labels:
+            kvo_notification: none
             severity: warning
           annotations:
             summary: "VM pushing high log volume"

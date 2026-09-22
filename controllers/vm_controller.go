@@ -24,6 +24,7 @@ import (
 
 	routev1 "github.com/openshift/api/route/v1"
 	"github.com/portworx/kubevirt-observability-operator/api"
+	"github.com/portworx/kubevirt-observability-operator/internal/alerting"
 	"github.com/portworx/kubevirt-observability-operator/internal/alloyconfig"
 	"github.com/portworx/kubevirt-observability-operator/internal/cloudinitmerge"
 	"github.com/portworx/kubevirt-observability-operator/internal/osdetect"
@@ -92,6 +93,35 @@ func (r *VMReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Re
 		r.Recorder.Eventf(vm, corev1.EventTypeWarning, "NamespaceLabelFailed", "Failed to label namespace for monitoring: %v", err)
 		return ctrl.Result{}, err
 	}
+
+	alertingReconciler := alerting.NewReconciler(r.Client)
+
+	ctrl.LoggerFrom(ctx).Info(
+		"reconciling namespace alerting",
+		"namespace", vm.Namespace,
+		"vm", vm.Name,
+	)
+
+	if err := alertingReconciler.ReconcileNamespace(
+		ctx,
+		vm.Namespace,
+	); err != nil {
+		r.Recorder.Eventf(
+			vm,
+			corev1.EventTypeWarning,
+			"AlertingReconcileFailed",
+			"Failed to reconcile namespace alerting: %v",
+			err,
+		)
+
+		return ctrl.Result{}, err
+	}
+
+	ctrl.LoggerFrom(ctx).Info(
+		"namespace alerting reconciled",
+		"namespace", vm.Namespace,
+		"vm", vm.Name,
+	)
 
 	if osFamily == osdetect.Linux || osFamily == osdetect.Windows {
 		if err := r.ensureMonitoringSSHSecretInNamespace(ctx, vm.Namespace); err != nil {
