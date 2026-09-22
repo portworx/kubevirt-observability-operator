@@ -8,6 +8,12 @@ import (
 	"github.com/portworx/kubevirt-observability-operator/pkg/deploy"
 )
 
+var (
+	version   = "dev"
+	commit    = "unknown"
+	buildDate = "unknown"
+)
+
 func main() {
 	if len(os.Args) < 2 {
 		printUsage()
@@ -30,6 +36,14 @@ func main() {
 			ctx,
 			os.Stdin,
 			os.Stdout,
+		)
+
+	case "version":
+		fmt.Printf(
+			"kvoctl %s\ncommit: %s\nbuild date: %s\n",
+			version,
+			commit,
+			buildDate,
 		)
 
 	default:
@@ -61,10 +75,12 @@ Usage:
 Commands:
   preflight    Check cluster prerequisites
   deploy       Deploy the KubeVirt Observability Platform
+  version      Print kvoctl version information
 
 Examples:
   kvoctl preflight
   kvoctl deploy
+  kvoctl version
 
 Environment variables for non-interactive deployment:
   LOKI_S3_BUCKET
