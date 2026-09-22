@@ -194,6 +194,10 @@ Receive real-time Prometheus and Loki alerts through Alertmanager with VM name, 
 
 ---
 
+## kvoctl
+
+For prerequisites, environment variables, binary builds, deployment, and validation, see [docs/kvoctl.md](docs/kvoctl.md).
+
 ## Quick Start
 
 Clone the repository:
