@@ -14,6 +14,7 @@ spec:
           expr: up{exporter=~"windows_exporter|node_exporter"} == 0
           for: 5m
           labels:
+            kvo_notification: normal
             severity: critical
           annotations:
             summary: "VM exporter down"
@@ -23,6 +24,7 @@ spec:
           expr: 100 - (avg by (namespace, vm_name) (rate(windows_cpu_time_total{mode="idle"}[5m])) * 100) > 85
           for: 10m
           labels:
+            kvo_notification: none
             severity: warning
           annotations:
             summary: "Windows VM high CPU"
@@ -32,6 +34,7 @@ spec:
           expr: 100 - (avg by (namespace, vm_name) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100) > 85
           for: 10m
           labels:
+            kvo_notification: none
             severity: warning
           annotations:
             summary: "Linux VM high CPU"
@@ -41,6 +44,7 @@ spec:
           expr: 100 * (1 - (windows_os_physical_memory_free_bytes / windows_cs_physical_memory_bytes)) > 85
           for: 10m
           labels:
+            kvo_notification: none
             severity: warning
           annotations:
             summary: "Windows VM high memory"
@@ -50,6 +54,7 @@ spec:
           expr: 100 * (1 - (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)) > 85
           for: 10m
           labels:
+            kvo_notification: none
             severity: warning
           annotations:
             summary: "Linux VM high memory"
@@ -59,6 +64,7 @@ spec:
           expr: 100 * (windows_logical_disk_free_bytes{volume!~"_Total"} / windows_logical_disk_size_bytes{volume!~"_Total"}) < 15
           for: 10m
           labels:
+            kvo_notification: normal
             severity: warning
           annotations:
             summary: "Windows VM disk space low"
@@ -83,6 +89,7 @@ spec:
             ) < 15
           for: 10m
           labels:
+            kvo_notification: normal
             severity: warning
             source: kubevirt-observability
           annotations:
@@ -108,6 +115,7 @@ spec:
             ) < 5
           for: 2m
           labels:
+            kvo_notification: normal
             severity: critical
             source: kubevirt-observability
           annotations:
@@ -129,6 +137,7 @@ spec:
             ) > 0.05
           for: 10m
           labels:
+            kvo_notification: none
             severity: warning
           annotations:
             summary: "Windows VM disk latency high"
@@ -149,6 +158,7 @@ spec:
             ) > 0.05
           for: 10m
           labels:
+            kvo_notification: none
             severity: warning
           annotations:
             summary: "Linux VM disk latency high"
@@ -158,6 +168,7 @@ spec:
           expr: rate(windows_logical_disk_reads_total{volume!~"_Total"}[5m]) + rate(windows_logical_disk_writes_total{volume!~"_Total"}[5m]) > 5000
           for: 10m
           labels:
+            kvo_notification: none
             severity: warning
           annotations:
             summary: "Windows VM high IOPS"
@@ -167,6 +178,7 @@ spec:
           expr: rate(node_disk_reads_completed_total{device!~"loop.*|ram.*"}[5m]) + rate(node_disk_writes_completed_total{device!~"loop.*|ram.*"}[5m]) > 5000
           for: 10m
           labels:
+            kvo_notification: none
             severity: warning
           annotations:
             summary: "Linux VM high IOPS"
@@ -176,6 +188,7 @@ spec:
           expr: rate(windows_logical_disk_read_bytes_total{volume!~"_Total"}[5m]) + rate(windows_logical_disk_write_bytes_total{volume!~"_Total"}[5m]) > 104857600
           for: 10m
           labels:
+            kvo_notification: none
             severity: warning
           annotations:
             summary: "Windows VM high disk throughput"
@@ -185,6 +198,7 @@ spec:
           expr: rate(node_disk_read_bytes_total{device!~"loop.*|ram.*"}[5m]) + rate(node_disk_written_bytes_total{device!~"loop.*|ram.*"}[5m]) > 104857600
           for: 10m
           labels:
+            kvo_notification: none
             severity: warning
           annotations:
             summary: "Linux VM high disk throughput"
@@ -194,6 +208,7 @@ spec:
           expr: rate(node_disk_io_time_seconds_total{device!~"loop.*|ram.*"}[5m]) > 0.9
           for: 15m
           labels:
+            kvo_notification: normal
             severity: critical
           annotations:
             summary: "Linux VM disk IO stuck/saturated"
@@ -203,6 +218,7 @@ spec:
           expr: rate(node_disk_discards_completed_total{device!~"loop.*|ram.*"}[5m]) > 1000
           for: 10m
           labels:
+            kvo_notification: none
             severity: warning
           annotations:
             summary: "Linux VM high discard rate"
@@ -216,6 +232,7 @@ spec:
             ) == 0
           for: 30m
           labels:
+            kvo_notification: none
             severity: warning
           annotations:
             summary: "Windows VM has no disk I/O"
@@ -229,6 +246,7 @@ spec:
             ) == 0
           for: 30m
           labels:
+            kvo_notification: none
             severity: warning
           annotations:
             summary: "Linux VM has no disk I/O"
@@ -254,6 +272,7 @@ spec:
             ) < 10240
           for: 1h
           labels:
+            kvo_notification: none
             severity: info
           annotations:
             summary: "Windows VM appears idle"
@@ -281,6 +300,7 @@ spec:
             ) < 10240
           for: 1h
           labels:
+            kvo_notification: none
             severity: info
           annotations:
             summary: "Linux VM appears idle"
