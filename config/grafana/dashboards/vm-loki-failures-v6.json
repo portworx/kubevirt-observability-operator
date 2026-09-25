@@ -311,7 +311,7 @@
       },
       "targets": [
         {
-          "expr": "{kubernetes_namespace_name=~\"$namespace\",source=\"windows_eventlog\"} |~ \"BugCheck|blue screen|1001\"",
+          "expr": "{kubernetes_namespace_name=~\"$namespace\",source=\"windows_eventlog\"} | json event_message=\"message\" | event_message=~\"(?i)(rebooted from a bugcheck|bugcheck was|event name: bluescreen|blue screen|bsod|memory[.]dmp)\"",
           "refId": "A"
         }
       ]
@@ -449,7 +449,7 @@
       },
       "targets": [
         {
-          "expr": "sum(count_over_time({kubernetes_namespace_name=~\"$namespace\", source=\"windows_eventlog\"} |~ \"(?i)(event id.?129|eventid.?129|storport|storahci|disk timeout|reset to device)\" [5m]))",
+          "expr": "sum(count_over_time({kubernetes_namespace_name=~\"$namespace\",source=\"windows_eventlog\"} | json event_id=\"event_id\", event_source=\"source\", event_channel=\"channel\" | event_id=129 | event_channel=\"System\" | event_source=~\"(?i)(viostor|storahci|iastor.*|storport|disk)\" [5m]))",
           "refId": "A"
         }
       ],
@@ -477,7 +477,7 @@
     },
     {
       "type": "stat",
-      "title": "Windows BSOD / BugCheck / WER Count",
+      "title": "Windows BSOD / BugCheck Count",
       "gridPos": {
         "h": 4,
         "w": 6,
@@ -490,7 +490,7 @@
       },
       "targets": [
         {
-          "expr": "sum(count_over_time({kubernetes_namespace_name=~\"$namespace\", source=\"windows_eventlog\"} |~ \"(?i)(bugcheck|blue screen|bsod|windows error reporting|wer|memory.dmp|system rebooted without cleanly shutting down)\" [5m]))",
+          "expr": "sum(count_over_time({kubernetes_namespace_name=~\"$namespace\",source=\"windows_eventlog\"} | json event_message=\"message\" | event_message=~\"(?i)(rebooted from a bugcheck|bugcheck was|event name: bluescreen|blue screen|bsod|memory[.]dmp)\" [5m]))",
           "refId": "A"
         }
       ],
@@ -572,7 +572,7 @@
       },
       "targets": [
         {
-          "expr": "sum(count_over_time({kubernetes_namespace_name=~\"$namespace\"} |~ \"(?i)(i/o error|io error|blk_update_request|buffer i/o error|xfs.*error|ext4.*error|filesystem error|ntfs.*error|journal has aborted)\" [5m]))",
+          "expr": "sum(count_over_time({kubernetes_namespace_name=~\"$namespace\",source=\"windows_eventlog\"} | json event_message=\"message\" | event_message=~\"(?i)(i/o error|io error|medium error|device error|disk error|bad sector|file system corruption|filesystem corruption|volume.*corrupt|filesystem error|file system error)\" [5m])) + sum(count_over_time({kubernetes_namespace_name=~\"$namespace\",source=\"linux_syslog\"} |~ \"(?i)(i/o error|io error|blk_update_request|buffer i/o error|end_request: I/O error|medium error|device error|disk error|bad sector|xfs.*error|ext4.*error|filesystem error|file system corruption|remounting filesystem read-only|journal has aborted)\" [5m]))",
           "refId": "A"
         }
       ],
@@ -677,7 +677,7 @@
       },
       "targets": [
         {
-          "expr": "{kubernetes_namespace_name=~\"$namespace\"} |~ \"(?i)(i/o error|io error|blk_update_request|buffer i/o error|end_request: I/O error|medium error|device error|disk error|bad sector|xfs.*error|ext4.*error|filesystem error|ntfs.*corrupt|ntfs.*error|journal has aborted)\"",
+          "expr": "{kubernetes_namespace_name=~\"$namespace\"} |~ \"(?i)(i/o error|io error|blk_update_request|buffer i/o error|end_request: I/O error|medium error|device error|disk error|bad sector|xfs.*error|ext4.*error|filesystem error|file system corruption|filesystem corruption|volume.*corrupt|journal has aborted)\"",
           "refId": "A"
         }
       ],
