@@ -15,7 +15,7 @@ spec:
         - alert: WindowsVMEvent129Detected
           expr: |
             sum by (kubernetes_namespace_name, vm_name) (
-              count_over_time({kubernetes_namespace_name="__NAMESPACE__", source="windows_eventlog", os="windows"} |~ "(?i)(event id.?129|eventid.?129|reset to device|storahci|iastor|disk timeout)" [5m])
+              count_over_time({kubernetes_namespace_name="__NAMESPACE__", source="windows_eventlog", os="windows"} | json event_id="event_id", event_source="source", event_channel="channel" | event_id=129 | event_channel="System" | event_source=~"(?i)(viostor|storahci|iastor.*|storport|disk)" [5m])
             ) > 0
           for: 1m
           labels:
@@ -29,7 +29,7 @@ spec:
         - alert: WindowsVMBSODDetected
           expr: |
             sum by (kubernetes_namespace_name, vm_name) (
-              count_over_time({kubernetes_namespace_name="__NAMESPACE__", source="windows_eventlog", os="windows"} |~ "(?i)(bugcheck|bug check|blue screen|bsod|stop error|memory[.]dmp|rebooted from a bugcheck)" [5m])
+              count_over_time({kubernetes_namespace_name="__NAMESPACE__", source="windows_eventlog", os="windows"} | json event_message="message" | event_message=~"(?i)(rebooted from a bugcheck|bugcheck was|event name: bluescreen|blue screen|bsod|memory[.]dmp)" [5m])
             ) > 0
           for: 1m
           labels:
@@ -57,7 +57,9 @@ spec:
         - alert: VMIOErrorDetected
           expr: |
             sum by (kubernetes_namespace_name, vm_name, os) (
-              count_over_time({kubernetes_namespace_name="__NAMESPACE__", source=~"linux_syslog|windows_eventlog"} |~ "(?i)(i/o error|io error|blk_update_request|buffer i/o error|end_request: I/O error|medium error|device error|disk error|reset to device|bad sector)" [5m])
+              count_over_time({kubernetes_namespace_name="__NAMESPACE__", source="windows_eventlog", os="windows"} | json event_message="message" | event_message=~"(?i)(i/o error|io error|medium error|device error|disk error|bad sector)" [5m])
+              +
+              count_over_time({kubernetes_namespace_name="__NAMESPACE__", source="linux_syslog", os="linux"} |~ "(?i)(i/o error|io error|blk_update_request|buffer i/o error|end_request: I/O error|medium error|device error|disk error|bad sector)" [5m])
             ) > 0
           for: 1m
           labels:
@@ -70,7 +72,9 @@ spec:
         - alert: VMFilesystemErrorDetected
           expr: |
             sum by (kubernetes_namespace_name, vm_name, os) (
-              count_over_time({kubernetes_namespace_name="__NAMESPACE__", source=~"linux_syslog|windows_eventlog"} |~ "(?i)(xfs.*error|ext4.*error|filesystem error|file system corruption|ntfs.*corrupt|ntfs.*error|remounting filesystem read-only|journal has aborted)" [5m])
+              count_over_time({kubernetes_namespace_name="__NAMESPACE__", source="windows_eventlog", os="windows"} | json event_message="message" | event_message=~"(?i)(file system corruption|filesystem corruption|volume.*corrupt|filesystem error|file system error|ntfs.*error)" [5m])
+              +
+              count_over_time({kubernetes_namespace_name="__NAMESPACE__", source="linux_syslog", os="linux"} |~ "(?i)(xfs.*error|ext4.*error|filesystem error|file system corruption|remounting filesystem read-only|journal has aborted)" [5m])
             ) > 0
           for: 1m
           labels:
