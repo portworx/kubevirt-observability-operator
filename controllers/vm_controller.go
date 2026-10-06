@@ -271,12 +271,25 @@ func (r *VMReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Re
 				return ctrl.Result{RequeueAfter: 5 * time.Second}, nil
 
 			case "unknown":
-				if !bootstrapTimedOut(vm, 10*time.Minute) {
-					return r.mark(ctx, vm, api.StatusPending, "bootstrap-in-progress")
+				// Existing VMs onboarded through kvoctl already have
+				// monitoring SSH access configured. They do not need to
+				// wait for the original cloud-init/Sysprep bootstrap state
+				// before remediation can run.
+				sshBootstrapComplete :=
+					ann["kubevirt-observability.io/ssh-bootstrap-complete"] == "true"
+
+				if !sshBootstrapComplete &&
+					!bootstrapTimedOut(vm, 10*time.Minute) {
+					return r.mark(
+						ctx,
+						vm,
+						api.StatusPending,
+						"bootstrap-in-progress",
+					)
 				}
 
-				// timeout exceeded
-				// remediation allowed
+				// Cloud-init timed out or guest SSH access was explicitly
+				// bootstrapped for an existing VM. Remediation is allowed.
 
 			case "failed":
 				// remediation allowed immediately
