@@ -2,10 +2,12 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"os"
 
 	"github.com/portworx/kubevirt-observability-operator/pkg/deploy"
+	"github.com/portworx/kubevirt-observability-operator/pkg/onboarding"
 )
 
 var (
@@ -38,6 +40,12 @@ func main() {
 			os.Stdout,
 		)
 
+	case "onboard":
+		err = runOnboard(
+			ctx,
+			os.Args[2:],
+		)
+
 	case "version":
 		fmt.Printf(
 			"kvoctl %s\ncommit: %s\nbuild date: %s\n",
@@ -66,6 +74,81 @@ func main() {
 	}
 }
 
+func runOnboard(
+	ctx context.Context,
+	args []string,
+) error {
+	fs := flag.NewFlagSet(
+		"onboard",
+		flag.ContinueOnError,
+	)
+
+	fs.SetOutput(os.Stderr)
+
+	cfg := onboarding.Config{}
+
+	cfg.LinuxUser = os.Getenv("KVO_LINUX_USER")
+	cfg.LinuxPassword = os.Getenv("KVO_LINUX_PASSWORD")
+
+	cfg.WindowsUser = os.Getenv("KVO_WINDOWS_USER")
+	cfg.WindowsPassword = os.Getenv("KVO_WINDOWS_PASSWORD")
+
+	cfg.JumpHost = os.Getenv("KVO_OCP_JUMP_HOST")
+	cfg.JumpUser = os.Getenv("KVO_OCP_JUMP_USER")
+	cfg.JumpKey = os.Getenv("KVO_OCP_JUMP_KEY")
+
+	fs.StringVar(
+		&cfg.Namespace,
+		"namespace",
+		"",
+		"limit onboarding to one namespace",
+	)
+
+	fs.StringVar(
+		&cfg.VMName,
+		"vm",
+		"",
+		"limit onboarding to one VM",
+	)
+
+	fs.StringVar(
+		&cfg.LinuxSelector,
+		"linux-selector",
+		"",
+		"Kubernetes label selector identifying Linux VMs",
+	)
+
+	fs.StringVar(
+		&cfg.WindowsSelector,
+		"windows-selector",
+		"",
+		"Kubernetes label selector identifying Windows VMs",
+	)
+
+	fs.BoolVar(
+		&cfg.DryRun,
+		"dry-run",
+		false,
+		"show onboarding plan without making changes",
+	)
+
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+
+	if cfg.VMName != "" && cfg.Namespace == "" {
+		return fmt.Errorf(
+			"--vm requires --namespace",
+		)
+	}
+
+	return onboarding.Run(
+		ctx,
+		os.Stdout,
+		cfg,
+	)
+}
+
 func printUsage() {
 	fmt.Print(`kvoctl - KubeVirt Observability CLI
 
@@ -75,11 +158,15 @@ Usage:
 Commands:
   preflight    Check cluster prerequisites
   deploy       Deploy the KubeVirt Observability Platform
+  onboard      Integrate existing VMs with KubeVirt Observability
   version      Print kvoctl version information
 
 Examples:
   kvoctl preflight
   kvoctl deploy
+  kvoctl onboard --dry-run
+  kvoctl onboard --namespace my-vms
+  kvoctl onboard --linux-selector 'kubevirt.io/os=ubuntu'
   kvoctl version
 
 Environment variables for non-interactive deployment:
